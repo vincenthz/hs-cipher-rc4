@@ -36,7 +36,7 @@ kats =
 runKat (key,plainText,cipherText) =
        snd (RC4.encrypt ctx plainText)  == cipherText
     && snd (RC4.decrypt ctx cipherText) == plainText
-    where ctx = RC4.initCtx $ B.unpack key
+    where ctx = RC4.initCtx $ key
 
 katToTestProperty (kat, i) = testProperty ("KAT " ++ show i) (runKat kat)
 
@@ -50,7 +50,7 @@ generateKey = choose (1, 284) >>= \sz -> (B.pack <$> replicateM sz arbitrary)
 generatePlaintext = choose (0,324) >>= \sz -> (B.pack <$> replicateM sz arbitrary)
 
 runOp f1 f2 (RC4Unit key plainText) =
-    let ctx = RC4.initCtx $ B.unpack key
+    let ctx = RC4.initCtx key
      in (snd $ f2 ctx $ snd $ f1 ctx plainText) == plainText
 
 tests =

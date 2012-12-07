@@ -1,82 +1,85 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
 -- |
 -- Module      : Crypto.Cipher.RC4
 -- License     : BSD-style
 -- Maintainer  : Vincent Hanquez <vincent@snarc.org>
--- Stability   : experimental
+-- Stability   : stable
 -- Portability : Good
 --
-
+-- Initial FFI implementation by Peter White <peter@janrain.com>
+--
+-- Reorganized and simplified to have an opaque context.
+--
 module Crypto.Cipher.RC4
-    ( Ctx
-    , initCtx
+    ( Ctx(..)
     , encrypt
     , decrypt
-    , encryptlazy
-    , decryptlazy
+    , initCtx
     ) where
 
-import Data.Vector.Unboxed
-import Data.Bits (xor)
 import Data.Word
-import Control.Arrow (second)
-import Data.Maybe (fromJust)
+import Foreign.Ptr
+import Foreign.ForeignPtr
+import System.IO.Unsafe (unsafeDupablePerformIO)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
-import Prelude hiding (length)
+import qualified Data.ByteString.Internal as B
+import Control.Applicative ((<$>))
 
-type Ctx = (Vector Word8, Word8, Word8)
+----------------------------------------------------------------------
 
-swap :: Vector Word8 -> Int -> Int -> Vector Word8
-swap arr x y
-	| x == y    = arr
-	| otherwise = arr // [(x, arr ! y), (y, arr ! x)]
+-- | The encryption context for RC4
+newtype Ctx = Ctx B.ByteString
 
-setKey :: Vector Word8 -> Int -> Word8 -> Int -> Vector Word8 -> Vector Word8
-setKey _   _  _  256 arr = arr
-setKey key ki si i   arr = setKey key ki' si' (i + 1) (swap arr (fromIntegral si') i)
-	where
-		si' = si + (key ! ki) + (arr ! i)
-		ki' = (ki + 1) `mod` (length key)
+instance Show Ctx where
+    show _ = "RC4.Ctx"
 
-{- | initCtx initialize the Ctx with the key as parameter.
-   the key can be of any size but not empty -}
-initCtx :: [Word8] -> Ctx
-initCtx key = (setKey (fromList key) 0 0 0 initialArray, 0, 0)
-	where
-		initialArray = generate 256 (\i -> fromIntegral i)
+-- | C Call for initializing the encryptor
+foreign import ccall unsafe "rc4.h rc4_init"
+    c_initCtx :: Ptr Word8 ->   -- ^ The encryption key
+                 Word32    ->   -- ^ The key length
+                 Ptr Ctx   ->   -- ^ The context
+                 IO ()
 
-getNextChar :: Ctx -> (Word8, Ctx)
-getNextChar (arr, x, y) = (c, (na, x', y'))
-	where
-		na = swap arr (fromIntegral x') (fromIntegral y')
-		x' = x + 1
-		y' = sx + y
-		sx = arr ! (fromIntegral x')
-		c  = na ! (fromIntegral (sx + (arr ! (fromIntegral y'))))
+foreign import ccall unsafe "rc4.h rc4_encrypt"
+    c_rc4 :: Ptr Ctx        -- ^ Pointer to the permutation
+          -> Ptr Word8      -- ^ Pointer to the clear text
+          -> Word32         -- ^ Length of the clear text
+          -> Ptr Word8      -- ^ Output buffer
+          -> IO ()
 
-genstream :: Ctx -> Int -> (B.ByteString, Ctx)
-genstream ctx len = second fromJust $ B.unfoldrN len (\c -> Just $ getNextChar c) ctx
+withByteStringPtr :: ByteString -> (Ptr Word8 -> IO a) -> IO a
+withByteStringPtr b f = withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
+    where (fptr, off, _) = B.toForeignPtr b
 
-{- | encrypt with the current context a bytestring and returns a new context
-   and the resulted encrypted bytestring -}
-encrypt :: Ctx -> B.ByteString -> (Ctx, B.ByteString)
-encrypt ctx d = (ctx', B.pack $ B.zipWith xor d rc4stream)
-	where
-		(rc4stream, ctx') = genstream ctx (B.length d)
+-- | RC4 context initialization.
+--
+-- seed the context with an initial key. the key size need to be
+-- adequate otherwise 
+initCtx :: B.ByteString -- ^ The key
+        -> Ctx          -- ^ The RC4 context with the key mixed in
+initCtx key = unsafeDupablePerformIO $
+    Ctx <$> (B.create 264 $ \ctx -> B.useAsCStringLen key $ \(keyPtr,keyLen) -> c_initCtx (castPtr keyPtr) (fromIntegral keyLen) (castPtr ctx))
 
-{- | decrypt with the current context a bytestring and returns a new context
-   and the resulted decrypted bytestring -}
+-- | RC4 encryption
+encrypt :: Ctx                 -- ^ The encryption context
+        -> B.ByteString        -- ^ The plaintext
+        -> (Ctx, B.ByteString) -- ^ The new encryption context, and the ciphertext
+encrypt (Ctx cctx) clearText = unsafeDupablePerformIO $
+    B.mallocByteString 264 >>= \dctx ->
+    B.mallocByteString len >>= \outfptr ->
+    withByteStringPtr clearText $ \clearPtr ->
+    withByteStringPtr cctx $ \srcCtx ->
+    withForeignPtr dctx $ \dstCtx -> do
+    withForeignPtr outfptr $ \outptr -> do
+        B.memcpy dstCtx srcCtx 264
+        c_rc4 (castPtr dstCtx) clearPtr (fromIntegral len) outptr
+        return $! (Ctx $! B.PS dctx 0 264, B.PS outfptr 0 len)
+    where len = B.length clearText
+
+-- | RC4 decryption. For RC4, decrypt = encrypt
+--
+--   See comments under the encrypt function.
+--
 decrypt :: Ctx -> B.ByteString -> (Ctx, B.ByteString)
 decrypt = encrypt
-
-{- | encrypt with the current context a lazy bytestring and returns a new context
-   and the resulted lencrypted lazy bytestring -}
-encryptlazy :: Ctx -> L.ByteString -> (Ctx, L.ByteString)
-encryptlazy ctx d = (ctx', L.pack $ L.zipWith xor d (L.fromChunks [ rc4stream ]))
-	where
-		(rc4stream, ctx') = genstream ctx (fromIntegral $ L.length d)
-
-{- | decrypt with the current context a lazy bytestring and returns a new context
-   and the resulted decrypted lazy bytestring -}
-decryptlazy :: Ctx -> L.ByteString -> (Ctx, L.ByteString)
-decryptlazy = encryptlazy
