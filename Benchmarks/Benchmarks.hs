@@ -18,11 +18,11 @@ main = defaultMain
         , bench "256"  $ whnf initCtx b256
         ]
     , bgroup "encrypt"
-        [ bench "8"    $ nf (encrypt ctx) b8
-        , bench "32"   $ nf (encrypt ctx) b32
-        , bench "64"   $ nf (encrypt ctx) b64
-        , bench "256"  $ nf (encrypt ctx) b256
-        , bench "1024" $ nf (encrypt ctx) b1024
+        [ bench "8"    $ nf (combine ctx) b8
+        , bench "32"   $ nf (combine ctx) b32
+        , bench "64"   $ nf (combine ctx) b64
+        , bench "256"  $ nf (combine ctx) b256
+        , bench "1024" $ nf (combine ctx) b1024
         ]
     ]
     where b1    = B.replicate 1 0xf7

@@ -34,8 +34,8 @@ kats =
     ]
 
 runKat (key,plainText,cipherText) =
-       snd (RC4.encrypt ctx plainText)  == cipherText
-    && snd (RC4.decrypt ctx cipherText) == plainText
+       snd (RC4.combine ctx plainText)  == cipherText
+    && snd (RC4.combine ctx cipherText) == plainText
     where ctx = RC4.initCtx $ key
 
 katToTestProperty (kat, i) = testProperty ("KAT " ++ show i) (runKat kat)
@@ -56,8 +56,7 @@ runOp f1 f2 (RC4Unit key plainText) =
 tests =
     [ testGroup "KAT-RC4" $ map katToTestProperty $ zip kats [0..]
     , testGroup "id"
-        [ testProperty "encrypt.decrypt" (runOp RC4.decrypt RC4.encrypt)
-        , testProperty "decrypt.encrypt" (runOp RC4.encrypt RC4.decrypt)
+        [ testProperty "combine.combine" (runOp RC4.combine RC4.combine)
         ]
     ]
 
