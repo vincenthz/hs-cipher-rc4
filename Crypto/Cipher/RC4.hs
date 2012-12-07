@@ -12,9 +12,11 @@
 --
 module Crypto.Cipher.RC4
     ( Ctx(..)
+    , initCtx
+    , generate
+    , combine
     , encrypt
     , decrypt
-    , initCtx
     ) where
 
 import Data.Word
@@ -36,17 +38,17 @@ instance Show Ctx where
 
 -- | C Call for initializing the encryptor
 foreign import ccall unsafe "rc4.h rc4_init"
-    c_initCtx :: Ptr Word8 ->   -- ^ The encryption key
-                 Word32    ->   -- ^ The key length
-                 Ptr Ctx   ->   -- ^ The context
-                 IO ()
+    c_rc4_init :: Ptr Word8 -- ^ The rc4 key
+               -> Word32    -- ^ The key length
+               -> Ptr Ctx   -- ^ The context
+               -> IO ()
 
-foreign import ccall unsafe "rc4.h rc4_encrypt"
-    c_rc4 :: Ptr Ctx        -- ^ Pointer to the permutation
-          -> Ptr Word8      -- ^ Pointer to the clear text
-          -> Word32         -- ^ Length of the clear text
-          -> Ptr Word8      -- ^ Output buffer
-          -> IO ()
+foreign import ccall unsafe "rc4.h rc4_combine"
+    c_rc4_combine :: Ptr Ctx        -- ^ Pointer to the permutation
+                  -> Ptr Word8      -- ^ Pointer to the clear text
+                  -> Word32         -- ^ Length of the clear text
+                  -> Ptr Word8      -- ^ Output buffer
+                  -> IO ()
 
 withByteStringPtr :: ByteString -> (Ptr Word8 -> IO a) -> IO a
 withByteStringPtr b f = withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
@@ -55,17 +57,22 @@ withByteStringPtr b f = withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
 -- | RC4 context initialization.
 --
 -- seed the context with an initial key. the key size need to be
--- adequate otherwise 
+-- adequate otherwise security takes a hit.
 initCtx :: B.ByteString -- ^ The key
         -> Ctx          -- ^ The RC4 context with the key mixed in
 initCtx key = unsafeDupablePerformIO $
-    Ctx <$> (B.create 264 $ \ctx -> B.useAsCStringLen key $ \(keyPtr,keyLen) -> c_initCtx (castPtr keyPtr) (fromIntegral keyLen) (castPtr ctx))
+    Ctx <$> (B.create 264 $ \ctx -> B.useAsCStringLen key $ \(keyPtr,keyLen) -> c_rc4_init (castPtr keyPtr) (fromIntegral keyLen) (castPtr ctx))
 
--- | RC4 encryption
-encrypt :: Ctx                 -- ^ The encryption context
-        -> B.ByteString        -- ^ The plaintext
-        -> (Ctx, B.ByteString) -- ^ The new encryption context, and the ciphertext
-encrypt (Ctx cctx) clearText = unsafeDupablePerformIO $
+-- | generate the next len bytes of the rc4 stream without combining
+-- it to anything.
+generate :: Ctx -> Int -> (Ctx, B.ByteString)
+generate ctx len = combine ctx (B.replicate len 0)
+
+-- | RC4 xor combination of the rc4 stream with an input
+combine :: Ctx                 -- ^ rc4 context
+        -> B.ByteString        -- ^ input
+        -> (Ctx, B.ByteString) -- ^ new rc4 context, and the output
+combine (Ctx cctx) clearText = unsafeDupablePerformIO $
     B.mallocByteString 264 >>= \dctx ->
     B.mallocByteString len >>= \outfptr ->
     withByteStringPtr clearText $ \clearPtr ->
@@ -73,13 +80,12 @@ encrypt (Ctx cctx) clearText = unsafeDupablePerformIO $
     withForeignPtr dctx $ \dstCtx -> do
     withForeignPtr outfptr $ \outptr -> do
         B.memcpy dstCtx srcCtx 264
-        c_rc4 (castPtr dstCtx) clearPtr (fromIntegral len) outptr
+        c_rc4_combine (castPtr dstCtx) clearPtr (fromIntegral len) outptr
         return $! (Ctx $! B.PS dctx 0 264, B.PS outfptr 0 len)
     where len = B.length clearText
 
--- | RC4 decryption. For RC4, decrypt = encrypt
---
---   See comments under the encrypt function.
---
-decrypt :: Ctx -> B.ByteString -> (Ctx, B.ByteString)
-decrypt = encrypt
+{-# DEPRECATED encrypt "use combine instead" #-}
+{-# DEPRECATED decrypt "use combine instead" #-}
+encrypt,decrypt :: Ctx -> B.ByteString -> (Ctx, B.ByteString)
+encrypt = combine
+decrypt = combine
