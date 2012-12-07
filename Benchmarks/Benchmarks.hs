@@ -4,6 +4,10 @@ import Criterion.Main
 
 import Crypto.Cipher.RC4
 import qualified Data.ByteString as B
+import Control.DeepSeq
+
+instance NFData Ctx where
+    rnf (Ctx c) = c `seq` ()
 
 main = defaultMain
     [ bgroup "init"
