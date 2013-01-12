@@ -6,6 +6,9 @@
 -- Stability   : stable
 -- Portability : Good
 --
+-- Simple implementation of the RC4 stream cipher.
+-- http://en.wikipedia.org/wiki/RC4
+--
 -- Initial FFI implementation by Peter White <peter@janrain.com>
 --
 -- Reorganized and simplified to have an opaque context.
