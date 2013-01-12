@@ -1,5 +1,5 @@
 Name:                cipher-rc4
-Version:             0.1.1
+Version:             0.1.2
 Description:         Fast RC4 cipher implementation
 License:             BSD3
 License-file:        LICENSE
