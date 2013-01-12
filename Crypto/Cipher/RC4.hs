@@ -1,4 +1,4 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE ForeignFunctionInterface, CPP #-}
 -- |
 -- Module      : Crypto.Cipher.RC4
 -- License     : BSD-style
@@ -22,13 +22,19 @@ module Crypto.Cipher.RC4
 import Data.Word
 import Foreign.Ptr
 import Foreign.ForeignPtr
-import System.IO.Unsafe (unsafeDupablePerformIO)
+import System.IO.Unsafe
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
 import Control.Applicative ((<$>))
 
 ----------------------------------------------------------------------
+unsafeDoIO :: IO a -> a
+#if __GLASGOW_HASKELL__ > 704
+unsafeDoIO = unsafeDupablePerformIO
+#else
+unsafeDoIO = unsafePerformIO
+#endif
 
 -- | The encryption context for RC4
 newtype Ctx = Ctx B.ByteString
@@ -60,7 +66,7 @@ withByteStringPtr b f = withForeignPtr fptr $ \ptr -> f (ptr `plusPtr` off)
 -- adequate otherwise security takes a hit.
 initCtx :: B.ByteString -- ^ The key
         -> Ctx          -- ^ The RC4 context with the key mixed in
-initCtx key = unsafeDupablePerformIO $
+initCtx key = unsafeDoIO $
     Ctx <$> (B.create 264 $ \ctx -> B.useAsCStringLen key $ \(keyPtr,keyLen) -> c_rc4_init (castPtr keyPtr) (fromIntegral keyLen) (castPtr ctx))
 
 -- | generate the next len bytes of the rc4 stream without combining
@@ -72,7 +78,7 @@ generate ctx len = combine ctx (B.replicate len 0)
 combine :: Ctx                 -- ^ rc4 context
         -> B.ByteString        -- ^ input
         -> (Ctx, B.ByteString) -- ^ new rc4 context, and the output
-combine (Ctx cctx) clearText = unsafeDupablePerformIO $
+combine (Ctx cctx) clearText = unsafeDoIO $
     B.mallocByteString 264 >>= \dctx ->
     B.mallocByteString len >>= \outfptr ->
     withByteStringPtr clearText $ \clearPtr ->
