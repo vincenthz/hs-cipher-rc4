@@ -17,6 +17,8 @@ Extra-Source-Files:  Tests/*.hs
 Library
   Build-Depends:     base >= 4 && < 5
                    , bytestring
+                   , byteable
+                   , crypto-cipher-types >= 0.0.5
   Exposed-modules:   Crypto.Cipher.RC4
   ghc-options:       -Wall
   C-sources:         cbits/rc4.c
@@ -31,6 +33,8 @@ Test-Suite test-cipher-rc4
                    , QuickCheck >= 2
                    , test-framework >= 0.3.3
                    , test-framework-quickcheck2 >= 0.2.9
+                   , crypto-cipher-types >= 0.0.5
+                   , crypto-cipher-tests >= 0.0.7
 
 Benchmark bench-cipher-rc4
   hs-source-dirs:    Benchmarks
@@ -39,6 +43,8 @@ Benchmark bench-cipher-rc4
   Build-depends:     base >= 4 && < 5
                    , bytestring
                    , cipher-rc4
+                   , crypto-cipher-types >= 0.0.5
+                   , crypto-cipher-benchmarks >= 0.0.3
                    , deepseq
                    , criterion
                    , mtl

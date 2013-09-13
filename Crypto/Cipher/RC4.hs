@@ -14,7 +14,11 @@
 -- Reorganized and simplified to have an opaque context.
 --
 module Crypto.Cipher.RC4
-    ( Ctx(..)
+    (
+      RC4
+    -- * deprecated types
+    , Ctx(..)
+    -- * deprecated functions, use crypto-cipher-types StreamCipher function
     , initCtx
     , generate
     , combine
@@ -23,6 +27,7 @@ module Crypto.Cipher.RC4
     ) where
 
 import Data.Word
+import Data.Byteable
 import Foreign.Ptr
 import Foreign.ForeignPtr
 import System.IO.Unsafe
@@ -30,6 +35,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as B
 import Control.Applicative ((<$>))
+import Crypto.Cipher.Types
 
 ----------------------------------------------------------------------
 unsafeDoIO :: IO a -> a
@@ -38,6 +44,19 @@ unsafeDoIO = unsafeDupablePerformIO
 #else
 unsafeDoIO = unsafePerformIO
 #endif
+
+newtype RC4 = RC4 Ctx
+
+instance Byteable RC4 where
+    toBytes (RC4 (Ctx b)) = b
+
+instance Cipher RC4 where
+    cipherInit key  = RC4 (initCtx $ toBytes key)
+    cipherName _    = "RC4"
+    cipherKeySize _ = KeySizeRange 1 1024
+
+instance StreamCipher RC4 where
+    streamCombine (RC4 ctx) b = (\(ctx2, r) -> (r, RC4 ctx2)) $ combine ctx b
 
 -- | The encryption context for RC4
 newtype Ctx = Ctx B.ByteString
