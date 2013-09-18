@@ -45,6 +45,7 @@ unsafeDoIO = unsafeDupablePerformIO
 unsafeDoIO = unsafePerformIO
 #endif
 
+-- | RC4 Stream cipher
 newtype RC4 = RC4 Ctx
 
 instance Byteable RC4 where
