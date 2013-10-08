@@ -18,7 +18,7 @@ Library
   Build-Depends:     base >= 4 && < 5
                    , bytestring
                    , byteable
-                   , crypto-cipher-types >= 0.0.5
+                   , crypto-cipher-types >= 0.0.5 && < 0.1
   Exposed-modules:   Crypto.Cipher.RC4
   ghc-options:       -Wall
   C-sources:         cbits/rc4.c
